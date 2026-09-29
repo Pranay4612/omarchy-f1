@@ -42,6 +42,34 @@ sleep 8
 kill $PID 2>/dev/null || true
 wait $PID 2>/dev/null || true
 
+# The service must actually be launchable from the path the QML resolved.
+# A path that is a URL rather than a filesystem path looks harmless right up
+# until the spawn fails, and a warm cache hides the symptom entirely.
+SVC_PATH=$(grep -oE "PANEL_SERVICE .*" /tmp/f1-panel-test.log | head -1 | sed 's/^PANEL_SERVICE //' || true)
+if [[ -n "$SVC_PATH" ]]; then
+  if [[ "$SVC_PATH" == *"://"* ]]; then
+    echo "  service path is a URL, not a filesystem path:"
+    echo "    $SVC_PATH"
+    echo "  the service could never be launched"
+    exit 1
+  fi
+  if [[ ! -f "$SVC_PATH" ]]; then
+    echo "  service script does not exist: $SVC_PATH"
+    exit 1
+  fi
+  LAUNCH_CACHE="$WORK/launch"
+  mkdir -p "$LAUNCH_CACHE"
+  if XDG_CACHE_HOME="$LAUNCH_CACHE" timeout 40 python3 "$SVC_PATH" --once >/dev/null 2>&1; then
+    echo "  service launches from the resolved path"
+  else
+    echo "  service failed to launch from: $SVC_PATH"
+    exit 1
+  fi
+else
+  echo "  the harness did not report a service path"
+  exit 1
+fi
+
 RESULT=$(grep -oE "PANEL_TEST (PASS|FAIL).*" /tmp/f1-panel-test.log | head -1 || true)
 
 if [[ -z "$RESULT" ]]; then

@@ -36,10 +36,26 @@ Item {
   // Set once the cache directory is known to exist; gates the FileView paths.
   property bool cacheReady: false
 
+  // Qt.resolvedUrl returns a URL, not a path: resolving "bin/f1-service"
+  // gives "file:///home/.../bin/f1-service". Passing that straight to an
+  // interpreter makes it look for a file literally called "file:///home/...",
+  // so every spawn fails and the service never starts. Qt.resolvedUrl is still
+  // the right way to locate a file next to this one -- the install directory is
+  // not knowable in advance -- so the URL is converted rather than replaced.
+  function toLocalPath(url) {
+    if (!url) return ""
+    var s = String(url)
+    if (s.indexOf("file://") === 0) {
+      s = s.substring(7)
+      if (s.charAt(0) !== "/") s = "/" + s
+    }
+    try { return decodeURIComponent(s) } catch (e) { return s }
+  }
+
   // Absolute path to this plugin folder, derived from this file's own location
   // rather than an assumed install prefix. The shell does not inject a plugin
   // directory, and the plugin may be a git checkout anywhere.
-  readonly property string pluginDir: Qt.resolvedUrl(".")
+  readonly property string pluginDir: root.toLocalPath(Qt.resolvedUrl("."))
 
   // F1_PYTHON lets a user point at a specific interpreter without the plugin
   // assuming a virtualenv; the default is whatever `python3` resolves to.
@@ -47,7 +63,7 @@ Item {
     var override = Quickshell.env("F1_PYTHON")
     return (override && override.length > 0) ? override : "python3"
   }
-  readonly property string serviceScript: Qt.resolvedUrl("bin/f1-service")
+  readonly property string serviceScript: root.toLocalPath(Qt.resolvedUrl("bin/f1-service"))
 
   // ------------------------------------------------------------- data model
   property var snapshot: ({})
@@ -329,6 +345,13 @@ Item {
       return JSON.stringify({
         cacheReady: root.cacheReady,
         statePath: root.statePath,
+        // Which interpreter and which script this instance will actually spawn.
+        // A stale path here is the difference between "the service is broken"
+        // and "the service was never launched", and the two look identical
+        // from the outside.
+        serviceScript: root.serviceScript,
+        pythonBin: root.pythonBin,
+        scriptExists: root.serviceScript.length > 0,
         mode: root.mode,
         connected: !!(root.snapshot && root.snapshot.connected),
         session: root.sessionLabel,

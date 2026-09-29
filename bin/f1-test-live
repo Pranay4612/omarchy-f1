@@ -74,7 +74,10 @@ def test_protocol():
         else:
             bad("Position.z decode", "no snapshots")
     else:
-        print(f"  {YELLOW}fixture missing, skipping archive decode check{RESET}")
+        print(f"  {YELLOW}no captured fixtures in this copy, skipping the archive decode check{RESET}")
+        print(f"  {DIM}Fixtures ship with the repository, not with a runtime-only install, so{RESET}")
+        print(f"  {DIM}this is expected in a copy made by install.sh. Run it from a clone, or{RESET}")
+        print(f"  {DIM}point --archive at a live .z file.{RESET}")
 
     drivers = fixture / "az2026-race-DriverList.json"
     if drivers.is_file():

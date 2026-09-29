@@ -16,6 +16,7 @@
 //   scripts/panel-test.sh --shot   also write design/shots/panel-e2e.png
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
@@ -129,6 +130,20 @@ Item {
 
     // Scrolling has to be demonstrated, not inferred from a clipped card: the
     // standings are the whole point of reaching the bottom.
+    // The service's script path has to be a real filesystem path. When it was
+    // left as a file:// URL the plugin looked perfectly healthy -- it read its
+    // cached snapshot, the panel rendered, every assertion here passed -- while
+    // the service it was supposed to launch never started at all. Checking the
+    // path is what makes that class of failure visible.
+    if (!service.serviceScript || service.serviceScript.indexOf("://") !== -1) {
+      missing.push("serviceScript is not a filesystem path: " + service.serviceScript)
+    }
+    // Existence is not checkable from QML here -- this Quickshell build has no
+    // FileIO singleton -- so scripts/panel-test.sh takes the path this harness
+    // reports and actually launches it. Between the two, a service that cannot
+    // be started fails the suite instead of being masked by a warm cache.
+    console.log("PANEL_SERVICE " + service.serviceScript)
+
     if (p && typeof p.scrollMetrics === "function" && typeof p.scrollBy === "function") {
       var m = p.scrollMetrics()
       if (!(m.contentHeight > m.viewport)) missing.push("content is not scrollable")
