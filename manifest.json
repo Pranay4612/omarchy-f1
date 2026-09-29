@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "f1.omarchy",
+  "name": "Formula 1",
+  "version": "1.0.0",
+  "author": "f1-omarchy contributors",
+  "license": "MIT",
+  "description": "Live Formula 1 timing for the Omarchy bar: session state, live classification, and cars moving on the real circuit, from the public formula1.com timing feed. Championship data from Jolpica. No account, no key, no paid service.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Formula 1",
+    "description": "Live F1 timing: next race, session, lap, and cars on the circuit.",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "replayCapture": ""
+    },
+    "schema": [
+      {
+        "key": "replayCapture",
+        "type": "string",
+        "label": "Replay capture directory",
+        "defaultValue": "",
+        "description": "Replay a recorded session instead of the live feed, for development and demos. Leave empty for normal live use. The panel shows a REPLAY badge whenever this is set."
+      }
+    ]
+  }
+}

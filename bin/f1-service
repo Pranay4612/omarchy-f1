@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""f1-service -- the single background process that talks to Formula 1.
+
+The Omarchy plugin starts this on demand; it can also be run in a terminal to
+watch what the plugin sees. It writes a normalised snapshot to
+$XDG_CACHE_HOME/omarchy/f1/state.json for the QML layer to read.
+
+    f1-service              run until interrupted
+    f1-service --once       refresh once and print the snapshot, then exit
+    f1-service --replay DIR replay a capture instead of the live feed
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import signal
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from f1 import cache
+from f1.service import F1Service
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--replay", metavar="DIR", help="replay a capture directory")
+    ap.add_argument("--once", action="store_true", help="one pass, print, exit")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
+
+    svc = F1Service(log=(lambda m: None) if args.quiet else print, replay=args.replay)
+
+    if args.once:
+        if args.replay:
+            from f1.replay import run_replay
+            cache.ensure_dirs()
+            run_replay(svc, args.replay, step=0.0, loop=False)
+        else:
+            svc._refresh_championship(force=True)
+            svc._publish()
+        data = cache.load_state() or {}
+        trimmed = {k: data.get(k) for k in ("mode", "sessionLabel", "circuit", "meeting", "lap", "totalLaps", "trackStatus", "connected")}
+        trimmed["drivers"] = len(data.get("drivers") or [])
+        trimmed["raceControl"] = len(data.get("raceControl") or [])
+        print(json.dumps(trimmed, indent=2))
+        return 0
+
+    def stop(*_a):
+        svc.stop()
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+    svc.start()
+    print(f"[f1] snapshot: {cache.state_path()}")
+    try:
+        while svc.running:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        stop()
+    svc.stop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""f1-capture -- record a live session to disk for replay and for learning.
+
+Writes a directory of topic files in exactly the format formula1.com's own
+static archive uses, so a capture can be replayed by f1-dev and used by
+f1-learn-circuit. Records every topic the plugin subscribes to.
+
+    f1-capture --seconds 3600 --out ~/captures/baku
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import signal
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from f1 import cache
+from f1.live.signalr import SignalRClient
+
+TOPICS = [
+    "DriverList", "SessionInfo", "SessionData", "TrackStatus", "LapCount",
+    "WeatherData", "TimingData", "TimingAppData", "RaceControlMessages",
+    "Position.z", "CarData.z",
+]
+
+# Position.z and CarData.z arrive several times a second. Writing every frame
+# to disk would be gigabytes over a race, so frames are appended to a JSONL
+# sidecar and only the topics that change rarely are written as single files.
+STREAM_TOPICS = {"Position.z", "CarData.z", "TimingData", "TimingAppData"}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--seconds", type=float, default=1800.0)
+    ap.add_argument("--out", default=None, help="output directory")
+    ap.add_argument("--interval", type=float, default=0.5, help="session data write interval")
+    args = ap.parse_args()
+
+    out = Path(args.out) if args.out else cache.captures_dir() / time.strftime("capture-%Y%m%d-%H%M%S")
+    out.mkdir(parents=True, exist_ok=True)
+    print(f"[f1] capturing to {out}")
+
+    client = SignalRClient(logger=lambda m: print(f"[f1] {m}"))
+    client.connect()
+    client.subscribe(TOPICS)
+    print(f"[f1] subscribed; recording for {args.seconds:.0f}s (Ctrl-C to stop early)")
+
+    stop = {"flag": False}
+    signal.signal(signal.SIGINT, lambda *a: stop.__setitem__("flag", True))
+    signal.signal(signal.SIGTERM, lambda *a: stop.__setitem__("flag", True))
+
+    meta = {"startedAt": time.time(), "label": out.name, "topics": TOPICS}
+    meta_path = out / "meta.json"
+    streams: dict[str, list] = {}
+    last_flush = 0.0
+    deadline = time.time() + args.seconds
+
+    try:
+        for topic, payload in client.messages():
+            if stop["flag"] or time.time() > deadline:
+                break
+            if topic in STREAM_TOPICS:
+                streams.setdefault(topic, []).append(payload)
+            elif topic not in meta:
+                (out / f"{topic}.json").write_bytes(_raw(payload))
+                if topic == "SessionInfo":
+                    info = _as_json(payload)
+                    meeting = (info or {}).get("Meeting") or {}
+                    circuit = meeting.get("Circuit") or {}
+                    meta["circuit"] = circuit.get("ShortName", out.name)
+                    meta["meeting"] = meeting.get("Name", "")
+                    meta["session"] = (info or {}).get("Type", "")
+            if time.time() - last_flush > args.interval:
+                last_flush = time.time()
+                _flush(out, streams, meta, meta_path)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        client.close()
+        _flush(out, streams, meta, meta_path)
+
+    print(f"[f1] done: {meta_path}")
+    return 0
+
+
+def _raw(payload):
+    if isinstance(payload, (bytes, bytearray)):
+        return bytes(payload)
+    return json.dumps(payload, separators=(",", ":")).encode()
+
+
+def _as_json(payload):
+    if isinstance(payload, (bytes, bytearray)):
+        try:
+            return json.loads(payload.decode("utf-8-sig"))
+        except ValueError:
+            return None
+    return payload if isinstance(payload, (dict, list)) else None
+
+
+def _flush(out: Path, streams: dict, meta: dict, meta_path: Path):
+    for topic, frames in streams.items():
+        if not frames:
+            continue
+        (out / f"{topic}.json").write_text(
+            json.dumps(frames[-1] if len(frames) == 1 else frames, separators=(",", ":"))
+        )
+    meta["frames"] = {k: len(v) for k, v in streams.items()}
+    meta["updatedAt"] = time.time()
+    meta_path.write_text(json.dumps(meta, indent=2))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

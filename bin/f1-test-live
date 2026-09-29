@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""f1-test-live -- prove the free F1 live feed works, without the Omarchy UI.
+
+This is the first thing to run when something looks wrong: it isolates the
+network, protocol and decoding layers from Quickshell, so a failure here is a
+real data problem and a success here means the problem is in the UI.
+
+    f1-test-live                 connect, subscribe, print a live snapshot
+    f1-test-live --seconds 60    keep listening for a minute
+    f1-test-live --watch         refresh the table until interrupted
+    f1-test-live --topics        list what the feed is publishing
+    f1-test-live --protocol      handshake/subscribe/decode self-test
+    f1-test-live --archive URL   decode a formula1.com static .z file
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from f1.live.decoder import decode_position_payload, decode_topic_payload
+from f1.live.signalr import HUB_NAME, SignalRClient
+from f1.live.state import LiveState
+
+BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
+GREEN, YELLOW, RED, CYAN = "\033[32m", "\033[33m", "\033[31m", "\033[36m"
+if not sys.stdout.isatty():
+    BOLD = DIM = RESET = GREEN = YELLOW = RED = CYAN = ""
+
+WATCHED = [
+    "DriverList", "SessionInfo", "SessionData", "TrackStatus", "LapCount",
+    "WeatherData", "TimingData", "RaceControlMessages", "Position.z",
+]
+
+
+def head(text, title="F1 LIVE DATA TEST"):
+    print(f"\n{BOLD}{title}{RESET}")
+    print(f"{DIM}{'=' * 46}{RESET}")
+    if text:
+        print(text)
+
+
+def ok(label, value, colour=GREEN):
+    print(f"  {label:<22} {colour}{value}{RESET}")
+
+
+def bad(label, value):
+    print(f"  {label:<22} {RED}{value}{RESET}")
+
+
+def test_protocol():
+    """Offline self-test of the pieces that are hard to debug from a race."""
+    print(f"\n{BOLD}PROTOCOL SELF-TEST{RESET}")
+    print(f"{DIM}{'=' * 46}{RESET}")
+    ok("hub name", HUB_NAME)
+    ok("handshake", '{"protocol":"json","version":1}\\x1e')
+
+    # A real, formula1.com-produced .z payload (Azerbaijan 2026, lap 51).
+    # Decoding this is the check that matters: it is the same wire format the
+    # live stream uses, so a pass here means Position.z decoding works.
+    fixture = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
+    sample = fixture / "az2026-race-Position.z.json"
+    if sample.is_file():
+        samples = decode_position_payload(sample.read_bytes())
+        if samples:
+            n = len(samples[0].entries)
+            ok("Position.z decode", f"{len(samples)} snapshot(s), {n} entries")
+        else:
+            bad("Position.z decode", "no snapshots")
+    else:
+        print(f"  {YELLOW}fixture missing, skipping archive decode check{RESET}")
+
+    drivers = fixture / "az2026-race-DriverList.json"
+    if drivers.is_file():
+        dl = decode_topic_payload(drivers.read_bytes())
+        ok("DriverList decode", f"{len(dl)} drivers, e.g. {list(dl.values())[0]['Tla']}")
+    return True
+
+
+def test_archive(url: str):
+    head(url, "ARCHIVE DECODE")
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        raw = resp.read()
+    samples = decode_position_payload(raw)
+    if not samples:
+        bad("result", "could not decode")
+        return 1
+    ok("snapshots", len(samples))
+    for s in samples[:3]:
+        pts = [(v.get("X"), v.get("Y")) for v in s.entries.values() if isinstance(v, dict) and "X" in v]
+        ok("timestamp", s.timestamp)
+        ok("entries", len(s.entries))
+        if pts:
+            ok("X range", f"{min(p[0] for p in pts)} .. {max(p[0] for p in pts)}")
+            ok("Y range", f"{min(p[1] for p in pts)} .. {max(p[1] for p in pts)}")
+    return 0
+
+
+def render(state: LiveState, colour_of=None):
+    drivers = state.leaderboard()
+    located = [d for d in drivers if d.has_position]
+    print()
+    print(f"  {BOLD}{'POS':<4}{'DRV':<5}{'NO':<4}{'GAP':<11}{'TYRE':<7}"
+          f"{'X':>8}{'Y':>8}  {RESET}{DIM}{'TEAM / NOTE'}{RESET}")
+    for d in drivers:
+        gap = "--" if d.gap is None else (f"+{d.gap:.3f}" if d.gap else "LEADER")
+        ty = d.tyre or ("PIT" if d.pit_status else "")
+        x = str(d.x) if d.x is not None else "-"
+        y = str(d.y) if d.y is not None else "-"
+        name = d.team
+        if d.retired:
+            name += "  DNF"
+        elif d.pit_status:
+            name += f"  {d.pit_status}"
+        elif d.pos_age is not None and d.pos_age > 12:
+            name += f"  {DIM}stale {d.pos_age:.0f}s{RESET}"
+        pos = d.position if d.position else "-"
+        print(f"  {pos:<4}{d.label():<5}{d.number:<4}{gap:<11}{ty:<7}{x:>8}{y:>8}  {DIM}{name}{RESET}")
+    print()
+    print(f"  drivers with a live position: {GREEN}{len(located)}/{len(drivers)}{RESET}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("--seconds", type=float, default=25.0, help="how long to listen")
+    ap.add_argument("--watch", action="store_true", help="keep refreshing until Ctrl-C")
+    ap.add_argument("--topics", action="store_true", help="print which topics arrive")
+    ap.add_argument("--protocol", action="store_true", help="run the offline protocol self-test")
+    ap.add_argument("--archive", metavar="URL", help="decode a static .z file instead of connecting live")
+    ap.add_argument("--raw", action="store_true", help="dump raw payload for a topic")
+    args = ap.parse_args()
+
+    if args.protocol:
+        test_protocol()
+        return 0
+    if args.archive:
+        return test_archive(args.archive)
+
+    head("livetiming.formula1.com · public · no key · no account")
+    state = LiveState()
+    seen: dict[str, int] = {}
+    client = None
+
+    deadline = time.time() + args.seconds
+    try:
+        client = SignalRClient(live=True)
+        client.connect()
+        ok("connected", "yes")
+        client.subscribe(["DriverList", "SessionInfo", "SessionData", "TrackStatus",
+                          "LapCount", "WeatherData", "TimingData",
+                          "RaceControlMessages", "Position.z"])
+        ok("subscribed", "9 topics")
+    except Exception as exc:  # noqa: BLE001
+        bad("connected", f"{type(exc).__name__}: {exc}")
+        print(f"\n  {DIM}The feed refused the connection. Checked: DNS, TLS, and that"
+              f" livetiming.formula1.com is reachable from this network.{RESET}")
+        return 2
+
+    print(f"  {DIM}listening for {args.seconds:.0f}s...{RESET}")
+    try:
+        for topic, payload in client.messages():
+            seen[topic] = seen.get(topic, 0) + 1
+            if args.raw and topic == "Position.z":
+                print(f"  {DIM}raw {topic}: {str(payload)[:120]}{RESET}")
+            if topic == "DriverList":
+                state.apply_driver_list(decode_topic_payload(payload))
+            elif topic == "SessionInfo":
+                state.apply_session_info(decode_topic_payload(payload))
+            elif topic == "SessionData":
+                state.apply_session_data(decode_topic_payload(payload))
+            elif topic == "TrackStatus":
+                state.apply_track_status(decode_topic_payload(payload))
+            elif topic == "LapCount":
+                state.apply_lap_count(decode_topic_payload(payload))
+            elif topic == "WeatherData":
+                state.apply_weather(decode_topic_payload(payload))
+            elif topic == "TimingData":
+                state.apply_timing(decode_topic_payload(payload))
+            elif topic == "RaceControlMessages":
+                state.apply_race_control(decode_topic_payload(payload))
+            elif topic == "Position.z":
+                for s in decode_position_payload(payload):
+                    state.apply_position(s)
+                state.age_positions()
+            if not args.watch and time.time() > deadline:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if client:
+            client.close()
+
+    head("", "RESULT")
+    ok("connected", "yes")
+    if not seen:
+        print(f"  {YELLOW}no topic traffic.{RESET}")
+        print(f"  {DIM}The connection works, but Formula 1 is not publishing a session")
+        print(f"  right now. The feed is only active during a session. Re-run during")
+        print(f"  a session, or use --archive/--protocol to verify decoding now.{RESET}")
+    else:
+        ok("topics received", ", ".join(sorted(seen)) or "none")
+        for t in WATCHED:
+            if t in seen:
+                ok(f"  {t}", f"{seen[t]} update(s)")
+
+    state.age_positions()
+    print()
+    print(f"  {BOLD}Session{RESET}   {state.session_type or 'unknown'} "
+          f"{DIM}({state.session_status or 'no status'}){RESET}")
+    print(f"  {BOLD}Meeting{RESET}   {state.meeting_name or '-'}")
+    print(f"  {BOLD}Circuit{RESET}   {state.circuit_short or '-'}")
+    print(f"  {BOLD}Lap{RESET}       {state.current_lap}/{state.total_laps}")
+    print(f"  {BOLD}Track{RESET}     {state.track_status or '-'}")
+    render(state)
+    return 0 if seen else 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

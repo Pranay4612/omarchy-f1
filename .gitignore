@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets and local environment. Nothing in this project needs them; they are
+# ignored so a stray local file can never reach the published repository.
+.env
+.env.*
+*.pem
+*.key
+id_rsa
+id_ed25519
+credentials
+secrets.json
+.netrc
+
+# Caches
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Local runtime state this project's tooling creates
+.harness-import/
+.preview-import/
+.removaltest/
+*.backup-*
+
+# Compiled / build artefacts
+build/
+dist/
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.class
+*.jar
+*.wasm
+
+# Editor and OS metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.orig
+*.rej
+*.bak
+
+# node_modules is not needed by this project at all; ignored so one can never
+# be committed by accident.
+node_modules/

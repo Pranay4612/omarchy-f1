@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""f1-learn-circuit -- build a circuit outline from position samples.
+
+Outlines are learned automatically by the service during a live session, so
+this is only needed to build one from a recording, or to rebuild after
+changing the curve parameters.
+
+    f1-learn-circuit --capture ~/captures/baku --circuit Baku
+    f1-learn-circuit --live                 learn from the next live session
+    f1-learn-circuit --list                 show what is stored
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from f1 import cache, curve
+from f1.live.decoder import decode_position_payload
+from f1.live.signalr import SignalRClient
+
+
+def show_list() -> int:
+    rows = cache.list_outlines()
+    if not rows:
+        print("no circuit outlines stored yet")
+        return 0
+    print(f"{'CIRCUIT':<16}{'LENGTH':>9}{'SAMPLES':>10}  LEARNED")
+    for r in sorted(rows, key=lambda d: str(d.get("key", ""))):
+        when = r.get("learnedAt")
+        stamp = time.strftime("%Y-%m-%d", time.localtime(when)) if when else "-"
+        print(f"{str(r.get('key')):<16}{float(r.get('length', 0)):>8.0f}m{r.get('samples', 0):>10}  {stamp}")
+    return 0
+
+
+def load_capture_samples(path: Path) -> tuple[list, dict]:
+    frames = []
+    for candidate in ("Position.z.json", "Position.z.z.json"):
+        p = path / candidate
+        if p.is_file():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except ValueError:
+                break
+            frames = data if isinstance(data, list) else [data]
+            break
+    samples = []
+    for frame in frames:
+        for s in decode_position_payload(frame):
+            for v in s.entries.values():
+                if isinstance(v, dict) and v.get("X") is not None:
+                    x, y = float(v["X"]), float(v["Y"])
+                    if abs(x) <= 20000 and abs(y) <= 20000:
+                        samples.append((x, y))
+    meta = {}
+    mp = path / "meta.json"
+    if mp.is_file():
+        try:
+            meta = json.loads(mp.read_text())
+        except ValueError:
+            pass
+    return samples, meta
+
+
+def learn_live() -> int:
+    client = SignalRClient(logger=lambda m: print(f"[f1] {m}"))
+    client.connect()
+    client.subscribe(["SessionInfo", "Position.z"])
+    print("[f1] recording position samples until interrupted (Ctrl-C)")
+    circuit = None
+    samples: list = []
+    try:
+        for topic, payload in client.messages():
+            if topic == "SessionInfo":
+                from f1.live.decoder import decode_topic_payload
+                info = decode_topic_payload(payload) or {}
+                circuit = ((info.get("Meeting") or {}).get("Circuit") or {}).get("ShortName")
+                print(f"[f1] circuit: {circuit}")
+            elif topic == "Position.z":
+                for s in decode_position_payload(payload):
+                    for v in s.entries.values():
+                        if isinstance(v, dict) and v.get("X") is not None:
+                            x, y = float(v["X"]), float(v["Y"])
+                            if abs(x) <= 20000 and abs(y) <= 20000:
+                                samples.append((x, y))
+                if len(samples) % 2000 == 0 and len(samples) >= 2000:
+                    print(f"[f1] {len(samples)} samples; trying to build an outline")
+                    _try_build(circuit, samples)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        client.close()
+    return 0 if _try_build(circuit, samples) is None else 0
+
+
+def _try_build(circuit, samples):
+    if not circuit:
+        print("[f1] circuit name unknown; cannot store an outline")
+        return None
+    if len(samples) < 200:
+        print(f"[f1] only {len(samples)} samples; need at least 200")
+        return None
+    path = curve.build_outline(samples)
+    if not path:
+        print(f"[f1] could not build a usable outline from {len(samples)} samples")
+        return None
+    length = curve.path_length(path)
+    payload = {
+        "key": circuit,
+        "points": [[round(x, 2), round(y, 2)] for x, y in path],
+        "length": round(length, 1),
+        "samples": len(samples),
+        "learnedAt": int(time.time()),
+    }
+    cache.save_outline(circuit, payload)
+    print(f"[f1] {circuit}: {length:.0f} m, {len(path)} points, from {len(samples)} samples")
+    return payload
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--capture", metavar="DIR")
+    ap.add_argument("--circuit", help="override the circuit name")
+    ap.add_argument("--live", action="store_true")
+    ap.add_argument("--list", action="store_true")
+    args = ap.parse_args()
+    cache.ensure_dirs()
+    if args.list:
+        return show_list()
+    if args.live:
+        return learn_live()
+    if args.capture:
+        samples, meta = load_capture_samples(Path(args.capture))
+        circuit = args.circuit or meta.get("circuit") or Path(args.capture).name
+        _try_build(circuit, samples)
+        return 0
+    ap.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
