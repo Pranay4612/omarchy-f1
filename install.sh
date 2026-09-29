@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ID="f1.omarchy"
+PLUGIN_ID="io.github.pranay4612.omarchy-f1"
 PLUGINS_DIR="$HOME/.config/omarchy/plugins"
 TARGET="$PLUGINS_DIR/$PLUGIN_ID"
 SHELL_JSON="$HOME/.config/omarchy/shell.json"
@@ -279,7 +279,7 @@ say ""
 say "Optional keyboard shortcut"
 say "  To open the panel from anywhere, add a keybind to your Hyprland config:"
 say ""
-say "    bind = SUPER SHIFT F, exec, omarchy-shell f1.omarchy.widget toggle"
+say "    bind = SUPER SHIFT F, exec, omarchy-shell io.github.pranay4612.omarchy-f1.widget toggle"
 say ""
 say "  This installer does not edit your Hyprland config. Add the line above"
 say "  to ~/.config/hypr/hyprland.conf (or a file it includes) if you want it."

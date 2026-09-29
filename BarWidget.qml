@@ -16,9 +16,9 @@ import qs.Ui
 // the numbers look wrong. Right click refreshes the championship data.
 BarWidget {
   id: root
-  moduleName: "f1.omarchy"
+  moduleName: "io.github.pranay4612.omarchy-f1"
 
-  readonly property var svc: bar && bar.shell ? bar.shell.serviceFor("f1.omarchy") : null
+  readonly property var svc: bar && bar.shell ? bar.shell.serviceFor("io.github.pranay4612.omarchy-f1") : null
 
   // Icon edge length. Declared here rather than left to the icon's own
   // implicit size: the button is sized from this and the icon is then centred
@@ -136,7 +136,7 @@ BarWidget {
   }
 
   IpcHandler {
-    target: "f1.omarchy.widget"
+    target: "io.github.pranay4612.omarchy-f1.widget"
 
     function open() { root.open() }
     function close() { root.close() }

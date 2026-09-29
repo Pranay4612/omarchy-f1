@@ -86,12 +86,12 @@ and shows the championship from cache — it does not fail.
 From the marketplace, or straight from the repository:
 
 ```bash
-omarchy plugin add https://github.com/OWNER/REPO.git
-omarchy plugin enable PLUGIN_ID --section right
+omarchy plugin add https://github.com/Pranay4612/omarchy-f1.git
+omarchy plugin enable io.github.pranay4612.omarchy-f1 --section right
 ```
 
 `omarchy plugin add` clones the repository into
-`~/.config/omarchy/plugins/PLUGIN_ID/`, validates the manifest against the
+`~/.config/omarchy/plugins/io.github.pranay4612.omarchy-f1/`, validates the manifest against the
 schema and enables it. Nothing is compiled, no package is installed and no
 service is registered — the plugin is QML plus a Python service that uses
 nothing outside the standard library.
@@ -99,8 +99,8 @@ nothing outside the standard library.
 The widget's bar placement can be given explicitly:
 
 ```bash
-omarchy plugin enable PLUGIN_ID --section right        # whole section
-omarchy plugin enable PLUGIN_ID --section right --before io.github.caffeinatedtech.qs-plugin-deepseek-pricing
+omarchy plugin enable io.github.pranay4612.omarchy-f1 --section right        # whole section
+omarchy plugin enable io.github.pranay4612.omarchy-f1 --section right --before io.github.caffeinatedtech.qs-plugin-deepseek-pricing
 ```
 
 ### Installing from a clone
@@ -120,7 +120,7 @@ something unfamiliar.
 ## Remove
 
 ```bash
-omarchy plugin remove PLUGIN_ID
+omarchy plugin remove io.github.pranay4612.omarchy-f1
 ```
 
 This disables the plugin, which removes it from your bar layout, and deletes
@@ -154,7 +154,7 @@ The installer does not touch your Hyprland config. To open the panel from
 anywhere, add this to `~/.config/hypr/hyprland.conf`:
 
 ```
-bind = SUPER SHIFT F, exec, omarchy-shell f1.omarchy.widget toggle
+bind = SUPER SHIFT F, exec, omarchy-shell io.github.pranay4612.omarchy-f1.widget toggle
 ```
 
 ### Configuration
@@ -464,8 +464,8 @@ Two IPC affordances exist for diagnosing a panel that does not appear without
 attaching a debugger to the shell:
 
 ```bash
-omarchy-shell f1.omarchy status          # the service: mode, data, circuit
-omarchy-shell f1.omarchy.widget status    # the widget: panel loaded, surface geometry
+omarchy-shell io.github.pranay4612.omarchy-f1 status          # the service: mode, data, circuit
+omarchy-shell io.github.pranay4612.omarchy-f1.widget status    # the widget: panel loaded, surface geometry
 ```
 
 ### Three structural notes
@@ -513,7 +513,7 @@ log.
 Middle-click the bar widget to restart the data service, or:
 
 ```bash
-omarchy-shell f1.omarchy refresh
+omarchy-shell io.github.pranay4612.omarchy-f1 refresh
 ```
 
 **The track map says it has no outline for this circuit.**

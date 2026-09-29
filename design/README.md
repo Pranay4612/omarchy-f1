@@ -43,9 +43,9 @@ scripts/preview.sh --idle     # championship.png
 # panel-e2e.png is captured from the running shell, because the panel's content
 # lives in its own layer-shell surface and cannot be grabbed from a standalone
 # quickshell instance:
-omarchy-shell f1.omarchy.widget open
+omarchy-shell io.github.pranay4612.omarchy-f1.widget open
 grim -g "900,25 740x590" design/shots/panel-e2e.png
-omarchy-shell f1.omarchy.widget close
+omarchy-shell io.github.pranay4612.omarchy-f1.widget close
 ```
 
 `scripts/panel-test.sh` still runs headless and asserts what a screenshot

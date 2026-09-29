@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-PLUGIN_ID="f1.omarchy"
+PLUGIN_ID="io.github.pranay4612.omarchy-f1"
 PLUGINS_DIR="$HOME/.config/omarchy/plugins"
 TARGET="$PLUGINS_DIR/$PLUGIN_ID"
 SHELL_JSON="$HOME/.config/omarchy/shell.json"

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "f1.omarchy",
+  "id": "io.github.pranay4612.omarchy-f1",
   "name": "Formula 1",
   "version": "1.0.0",
-  "author": "f1-omarchy contributors",
+  "author": "Pranay Shekar",
   "license": "MIT",
   "description": "Live Formula 1 timing for the Omarchy bar: session state, live classification, and cars moving on the real circuit, from the public formula1.com timing feed. Championship data from Jolpica. No account, no key, no paid service.",
   "kinds": [

@@ -46,7 +46,7 @@ Item {
   // reads a few colours off the bar, so that is all the stub has to provide.
   QtObject {
     id: shellStub
-    function serviceFor(id) { return id === "f1.omarchy" ? service : null }
+    function serviceFor(id) { return id === "io.github.pranay4612.omarchy-f1" ? service : null }
   }
   QtObject {
     id: barStub

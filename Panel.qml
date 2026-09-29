@@ -29,8 +29,8 @@ import qs.Ui
 //   could fail on whichever type it had not reached yet.
 Panel {
   id: root
-  moduleName: "f1.omarchy"
-  ipcTarget: "f1.omarchy"
+  moduleName: "io.github.pranay4612.omarchy-f1"
+  ipcTarget: "io.github.pranay4612.omarchy-f1"
   manageIpc: false
 
   // Injected by the bar widget. KeyboardPanel needs the anchor to place itself
@@ -39,7 +39,7 @@ Panel {
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
 
-  readonly property var svc: bar && bar.shell ? bar.shell.serviceFor("f1.omarchy") : null
+  readonly property var svc: bar && bar.shell ? bar.shell.serviceFor("io.github.pranay4612.omarchy-f1") : null
 
   readonly property bool live: svc ? (svc.isLive || svc.isReplay) : false
   readonly property bool replay: svc ? svc.isReplay : false

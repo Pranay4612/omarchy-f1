@@ -318,11 +318,11 @@ Item {
 
   // ------------------------------------------------------------------- IPC
   IpcHandler {
-    target: "f1.omarchy"
+    target: "io.github.pranay4612.omarchy-f1"
 
     function refresh(): string { root.restartService(); return "ok" }
     function openPanel(): string {
-      if (root.shell) root.shell.summon("f1.omarchy", {})
+      if (root.shell) root.shell.summon("io.github.pranay4612.omarchy-f1", {})
       return "ok"
     }
     function status(): string {
