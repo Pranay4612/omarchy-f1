@@ -82,9 +82,12 @@ fi
 
 # -------------------------------------------------------------------- service
 # The service is a detached child of the shell. Stop it before removing the
-# files it executes.
-if pgrep -f "f1-omarchy-plugin/bin/f1-service" >/dev/null 2>&1; then
-  pkill -f "f1-omarchy-plugin/bin/f1-service" 2>/dev/null || true
+# files it executes. The path is derived from the plugin id rather than
+# hardcoded, so it keeps matching the running process when the id changes --
+# a literal here silently stops matching and the service is never stopped.
+SERVICE_SCRIPT="$TARGET/bin/f1-service"
+if pgrep -f "$SERVICE_SCRIPT" >/dev/null 2>&1; then
+  pkill -f "$SERVICE_SCRIPT" 2>/dev/null || true
   sleep 0.3
   ok "stopped the running F1 service"
 fi
